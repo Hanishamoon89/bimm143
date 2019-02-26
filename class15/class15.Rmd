@@ -1,0 +1,209 @@
+---
+title: "Class15: Transcriptomics and the analysis of RNA-Seq dat"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import countData and colData into R
+
+```{r}
+counts <- read.csv("data/airway_scaledcounts.csv", stringsAsFactors = FALSE)
+metadata <-  read.csv("data/airway_metadata.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
+head(metadata)
+```
+
+```{r}
+dim(counts)
+head(counts)
+```
+
+```{r}
+metadata$id
+```
+
+```{r}
+all(colnames(counts)[-1]==metadata$id)
+```
+
+
+first task find which columns in **counts** correspond to the control conditions (i.e. no drug!). Then we can calculate the mean count value for each gene
+
+```{r}
+control.inds<- metadata$dex== "control"
+control.ids<- metadata$id[control.inds]
+
+head( counts[,control.inds] )
+```
+
+
+calculate the mean counts value for all genes
+```{r}
+control.mean <- rowSums(counts[, control.ids])/ ncol(counts[,control.ids])
+names(control.mean) <- counts$ensgene
+head(control.mean)
+```
+
+
+
+Now do the same thing for the drug treated samples (i.e. *treated* columns)
+```{r}
+treated <- metadata[metadata[,"dex"]=="treated",]
+treated.mean <- rowSums( counts[, treated$id])/ncol(counts[, treated$id])
+names(treated.mean) <- counts$ensgene
+head(treated.mean)
+```
+
+combine the mean count values for control and treated into a new data.frame called meancounts
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+```
+
+```{r}
+colSums(meancounts)
+```
+
+
+now we can plot the drug treated vs non-drug control count values
+
+```{r}
+plot(meancounts$control.mean, meancounts$treated.mean)
+```
+
+```{r}
+?plot.default
+```
+
+
+```{r}
+plot(meancounts$control.mean, meancounts$treated.mean, log= "xy")
+```
+
+
+
+Here we calculate log2foldchange, add it to our meancounts data.frame and inspect the results either with the head() or the View() function for example.
+
+```{r}
+meancounts$log2fc<-
+log2(meancounts[, "treated.mean"]/meancounts[, "control.mean"])
+head(meancounts)
+```
+
+
+
+
+```{r}
+toy <- meancounts[1:6,]
+which(toy[ ,1:2]==0, arr.ind=TRUE)
+```
+
+
+```{r}
+zero.vals <- which(meancounts[,1:2]==0, arr.ind=TRUE)
+
+to.rm <- unique(zero.vals[,1])
+mycounts <- meancounts[-to.rm,]
+head(mycounts)
+```
+
+
+
+
+```{r}
+up.ind <- mycounts$log2fc > 2
+down.ind <- mycounts$log2fc < (-2)
+```
+
+```{r}
+sum(up.ind)
+```
+
+
+there are 'sum(up.ind)' up regulated genes and 'sum(down.ind)' down regulated genes. 
+
+
+
+```{r}
+head(mycounts[up.ind,])
+```
+
+
+##Adding annotation data
+
+```{r}
+anno <- read.csv("data/annotables_grch38.csv")
+head(anno)
+```
+
+
+
+
+```{r}
+mycounts.annotated <- merge(x=mycounts, y=anno, by.x="row.names", by.y= "ensgene")
+head(mycounts.annotated)
+```
+
+
+```{r}
+library("DESeq2")
+citation("DESeq2")
+
+```
+
+##Importing data
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts, 
+                              colData=metadata, 
+                              design=~dex, 
+                              tidy=TRUE)
+dds
+```
+
+
+```{r}
+dds <- DESeq(dds)
+```
+
+```{r}
+res <- results(dds)
+res
+```
+
+
+
+```{r}
+summary(res)
+```
+
+```{r}
+res01 <- subset(as.data.frame(res), padj < 0.01)
+nrow(resSig01)
+```
+
+
+```{r}
+mycols <- rep("gray", nrow(res01))
+mycols[abs(res01$log2FoldChange) > 2] <- "red"
+inds <- (res01$padj < 0.01) & (abs(res01$log2FoldChange) > 2 )
+mycols[inds]<-"blue"
+plot(res01$log2FoldChange, -log(res01$padj), col=mycols)
+
+```
+
+
+
+
+
+
+
+
+
+
